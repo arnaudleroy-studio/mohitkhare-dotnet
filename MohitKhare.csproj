@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <PackageId>MohitKhare</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Arnaud Leroy</Authors>
+    <Description>Developer utilities and token counting tools.</Description>
+    <PackageProjectUrl>https://mohitkhare.me</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/arnaudleroy-studio/mohitkhare-dotnet</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>developer utilities tools</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
