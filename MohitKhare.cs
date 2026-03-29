@@ -1,212 +1,212 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace MohitKhare
+namespace MohitKhare;
+
+// -- Token Estimation --------------------------------------------------------
+
+/// <summary>
+/// Result of a token estimation including the raw count and cost projection.
+/// </summary>
+public sealed record TokenEstimate(
+    int Tokens,
+    int Words,
+    int Characters)
 {
     /// <summary>
-    /// Core metadata for MohitKhare developer utilities.
-    /// Homepage: https://mohitkhare.me
+    /// Estimates the API cost at a given price per million tokens.
+    /// Default rate ($3.00/M) approximates GPT-4-class input pricing.
     /// </summary>
-    public static class Info
+    public decimal EstimateCost(decimal pricePerMillionTokens = 3.00m) =>
+        Tokens * pricePerMillionTokens / 1_000_000m;
+}
+
+/// <summary>
+/// Estimates token counts for text using a word-boundary heuristic.
+/// The ratio of ~1.33 tokens per word is calibrated against BPE tokenizers
+/// used by GPT-class and Claude-class models.
+/// </summary>
+public static class TokenEstimator
+{
+    private const double TokensPerWord = 1.33;
+
+    private static readonly Regex WordBoundary =
+        new(@"\S+", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Estimates the number of tokens in the given text.
+    /// </summary>
+    public static TokenEstimate Estimate(string text)
     {
-        public const string Version = "0.1.0";
-        public const string BaseUrl = "https://mohitkhare.me";
-        public const string Author = "Mohit Khare";
-        public const string Description = "Developer utilities for .NET: token counting, slug generation, text analysis, and common helpers.";
+        if (string.IsNullOrWhiteSpace(text))
+            return new TokenEstimate(0, 0, 0);
+
+        var words = WordBoundary.Matches(text).Count;
+        var tokens = (int)Math.Ceiling(words * TokensPerWord);
+        return new TokenEstimate(tokens, words, text.Length);
+    }
+}
+
+// -- Text Analysis -----------------------------------------------------------
+
+/// <summary>
+/// Result of a full text analysis.
+/// </summary>
+public sealed record TextAnalysis(
+    int WordCount,
+    int SentenceCount,
+    int ParagraphCount,
+    TimeSpan ReadingTime,
+    double FleschReadingEase,
+    string ReadingLevel);
+
+/// <summary>
+/// Analyzes text for word count, reading time, and readability.
+/// Reading time assumes 238 words per minute (average adult reading speed).
+/// Readability is computed using the Flesch Reading Ease formula.
+/// </summary>
+public static class TextAnalyzer
+{
+    private const double WordsPerMinute = 238.0;
+
+    private static readonly Regex SentenceEnd =
+        new(@"[.!?]+", RegexOptions.Compiled);
+
+    private static readonly Regex WordPattern =
+        new(@"\b[a-zA-Z]+\b", RegexOptions.Compiled);
+
+    private static readonly Regex ParagraphSplit =
+        new(@"\n\s*\n", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Performs a full analysis of the given text, returning word count,
+    /// sentence count, paragraph count, estimated reading time, and a
+    /// Flesch Reading Ease score with a human-readable level label.
+    /// </summary>
+    public static TextAnalysis Analyze(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return new TextAnalysis(0, 0, 0, TimeSpan.Zero, 0, "N/A");
+
+        var words = WordPattern.Matches(text);
+        int wordCount = words.Count;
+        int sentenceCount = Math.Max(1, SentenceEnd.Matches(text).Count);
+        int paragraphCount = Math.Max(1, ParagraphSplit.Split(text).Length);
+
+        var readingTime = TimeSpan.FromMinutes(wordCount / WordsPerMinute);
+
+        // Flesch Reading Ease
+        int totalSyllables = words.Sum(w => CountSyllables(w.Value));
+        double fre = 206.835
+            - 1.015 * ((double)wordCount / sentenceCount)
+            - 84.6 * ((double)totalSyllables / wordCount);
+        fre = Math.Clamp(fre, 0, 100);
+
+        string level = fre switch
+        {
+            >= 90 => "Very Easy",
+            >= 80 => "Easy",
+            >= 70 => "Fairly Easy",
+            >= 60 => "Standard",
+            >= 50 => "Fairly Difficult",
+            >= 30 => "Difficult",
+            _     => "Very Difficult"
+        };
+
+        return new TextAnalysis(wordCount, sentenceCount, paragraphCount,
+            readingTime, Math.Round(fre, 1), level);
     }
 
     /// <summary>
-    /// Estimates token counts for text strings.
-    /// Useful for working with LLM APIs that charge per token.
-    /// Uses the standard ~4 characters per token heuristic.
+    /// Returns the estimated reading time for a given word count.
     /// </summary>
-    public static class TokenCounter
+    public static TimeSpan ReadingTime(int wordCount) =>
+        TimeSpan.FromMinutes(wordCount / WordsPerMinute);
+
+    private static int CountSyllables(string word)
     {
-        private const double CharsPerToken = 4.0;
+        word = word.ToLowerInvariant();
+        if (word.Length <= 2) return 1;
 
-        /// <summary>
-        /// Estimates the token count for a given text string.
-        /// Uses a ~4 characters per token approximation.
-        /// </summary>
-        public static int Estimate(string text)
+        int count = 0;
+        bool prevVowel = false;
+        foreach (var c in word)
         {
-            if (string.IsNullOrEmpty(text)) return 0;
-            return (int)Math.Ceiling(text.Length / CharsPerToken);
+            bool isVowel = "aeiouy".Contains(c);
+            if (isVowel && !prevVowel)
+                count++;
+            prevVowel = isVowel;
         }
 
-        /// <summary>
-        /// Estimates cost in USD for a given text at a per-token rate.
-        /// </summary>
-        /// <param name="text">Input text</param>
-        /// <param name="pricePerMillionTokens">Cost per 1M tokens in USD</param>
-        public static decimal EstimateCost(string text, decimal pricePerMillionTokens)
+        // Silent 'e' adjustment
+        if (word.EndsWith('e') && count > 1)
+            count--;
+
+        return Math.Max(1, count);
+    }
+}
+
+// -- Slug Helper -------------------------------------------------------------
+
+/// <summary>
+/// Converts text to URL-safe slugs with Unicode normalization and
+/// diacritics removal.
+/// </summary>
+public static class Slugify
+{
+    private static readonly Regex NonAlphaNum = new(@"[^a-z0-9\s-]", RegexOptions.Compiled);
+    private static readonly Regex Whitespace  = new(@"[\s-]+",       RegexOptions.Compiled);
+
+    /// <summary>
+    /// Converts a string to a URL-safe, lowercase slug.
+    /// </summary>
+    /// <example>
+    /// Slugify.ToSlug("Hello World!")            // "hello-world"
+    /// Slugify.ToSlug("C# Best Practices 2025") // "c-best-practices-2025"
+    /// </example>
+    public static string ToSlug(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        var normalized = text.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(normalized.Length);
+
+        foreach (var c in normalized)
         {
-            var tokens = Estimate(text);
-            return Math.Round(tokens * pricePerMillionTokens / 1_000_000m, 6);
+            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                sb.Append(c);
         }
 
-        /// <summary>
-        /// Checks whether a text fits within a token budget.
-        /// </summary>
-        public static bool FitsInBudget(string text, int maxTokens)
-        {
-            return Estimate(text) <= maxTokens;
-        }
+        var result = sb.ToString().Normalize(NormalizationForm.FormC);
+        result = result.ToLowerInvariant();
+        result = NonAlphaNum.Replace(result, "");
+        result = Whitespace.Replace(result, "-");
+        return result.Trim('-');
     }
 
     /// <summary>
-    /// Text analysis and statistics utilities.
+    /// Generates a slug with an optional maximum length, truncating at a
+    /// word boundary to avoid broken words.
     /// </summary>
-    public static class TextAnalyzer
+    public static string ToSlug(string text, int maxLength)
     {
-        /// <summary>
-        /// Counts words in a text string.
-        /// </summary>
-        public static int WordCount(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return 0;
-            return text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
-        }
+        var slug = ToSlug(text);
+        if (slug.Length <= maxLength)
+            return slug;
 
-        /// <summary>
-        /// Estimates reading time in minutes (average 238 words per minute).
-        /// </summary>
-        public static double ReadingTimeMinutes(string text)
-        {
-            var words = WordCount(text);
-            return Math.Round(words / 238.0, 1);
-        }
-
-        /// <summary>
-        /// Calculates sentence count by splitting on sentence-ending punctuation.
-        /// </summary>
-        public static int SentenceCount(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return 0;
-            return Regex.Split(text.Trim(), @"[.!?]+\s*")
-                .Count(s => !string.IsNullOrWhiteSpace(s));
-        }
-
-        /// <summary>
-        /// Computes the Flesch-Kincaid reading ease score (0-100).
-        /// Higher scores indicate easier readability.
-        /// </summary>
-        public static double FleschReadingEase(string text)
-        {
-            var words = WordCount(text);
-            var sentences = SentenceCount(text);
-            var syllables = EstimateSyllables(text);
-
-            if (words == 0 || sentences == 0) return 0;
-
-            return Math.Round(
-                206.835
-                - 1.015 * ((double)words / sentences)
-                - 84.6 * ((double)syllables / words),
-                1
-            );
-        }
-
-        private static int EstimateSyllables(string text)
-        {
-            var words = text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            int total = 0;
-            foreach (var word in words)
-            {
-                var clean = Regex.Replace(word.ToLowerInvariant(), @"[^a-z]", "");
-                if (clean.Length <= 3) { total += 1; continue; }
-                var vowels = Regex.Matches(clean, @"[aeiouy]+").Count;
-                if (clean.EndsWith("e")) vowels = Math.Max(1, vowels - 1);
-                total += Math.Max(1, vowels);
-            }
-            return total;
-        }
+        slug = slug[..maxLength];
+        int lastHyphen = slug.LastIndexOf('-');
+        return lastHyphen > 0 ? slug[..lastHyphen] : slug;
     }
+}
 
-    /// <summary>
-    /// URL-safe slug generation with multiple format options.
-    /// </summary>
-    public static class SlugGenerator
-    {
-        /// <summary>
-        /// Converts a string to a URL-safe slug.
-        /// </summary>
-        public static string Slugify(string input)
-        {
-            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
-            var slug = input.ToLowerInvariant().Trim();
-            slug = Regex.Replace(slug, @"[^a-z0-9\s-]", "");
-            slug = Regex.Replace(slug, @"\s+", "-");
-            slug = Regex.Replace(slug, @"-+", "-");
-            return slug.Trim('-');
-        }
-
-        /// <summary>
-        /// Converts a string to a file-safe name (underscores instead of dashes).
-        /// </summary>
-        public static string ToFileName(string input)
-        {
-            return Slugify(input).Replace('-', '_');
-        }
-
-        /// <summary>
-        /// Converts a string to camelCase.
-        /// </summary>
-        public static string ToCamelCase(string input)
-        {
-            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
-            var words = input.Split(new[] { ' ', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
-            if (words.Length == 0) return string.Empty;
-            var sb = new StringBuilder(words[0].ToLowerInvariant());
-            for (int i = 1; i < words.Length; i++)
-            {
-                if (words[i].Length > 0)
-                {
-                    sb.Append(char.ToUpperInvariant(words[i][0]));
-                    if (words[i].Length > 1)
-                        sb.Append(words[i].Substring(1).ToLowerInvariant());
-                }
-            }
-            return sb.ToString();
-        }
-    }
-
-    /// <summary>
-    /// Common string extension methods for .NET developers.
-    /// </summary>
-    public static class StringExtensions
-    {
-        /// <summary>
-        /// Truncates a string to a maximum length, appending an ellipsis if truncated.
-        /// </summary>
-        public static string Truncate(this string value, int maxLength, string suffix = "...")
-        {
-            if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
-                return value;
-            return value.Substring(0, maxLength - suffix.Length) + suffix;
-        }
-
-        /// <summary>
-        /// Strips all HTML tags from a string, returning plain text.
-        /// </summary>
-        public static string StripHtml(this string html)
-        {
-            if (string.IsNullOrEmpty(html)) return string.Empty;
-            return Regex.Replace(html, @"<[^>]+>", "").Trim();
-        }
-
-        /// <summary>
-        /// Extracts the first N sentences from a text.
-        /// </summary>
-        public static string FirstSentences(this string text, int count)
-        {
-            if (string.IsNullOrWhiteSpace(text) || count <= 0) return string.Empty;
-            var matches = Regex.Matches(text, @"[^.!?]*[.!?]");
-            var sentences = matches.Take(count).Select(m => m.Value.Trim());
-            return string.Join(" ", sentences);
-        }
-    }
+/// <summary>
+/// Package metadata and version information.
+/// </summary>
+public static class Info
+{
+    public const string Version = "0.1.0";
+    public const string BaseUrl = "https://mohitkhare.me";
 }

@@ -6,14 +6,12 @@
     <PackageId>MohitKhare</PackageId>
     <Version>0.1.0</Version>
     <Authors>Arnaud Leroy</Authors>
-    <Description>Developer utilities for .NET: LLM token counting and cost estimation, text readability analysis (Flesch-Kincaid), slug generation with multiple formats, and string extension methods (truncate, strip HTML, extract sentences).</Description>
+    <Description>Developer utilities for token estimation, text analysis (word count, reading time, readability), and slug generation for .NET projects.</Description>
     <PackageProjectUrl>https://mohitkhare.me</PackageProjectUrl>
     <RepositoryUrl>https://github.com/arnaudleroy-studio/mohitkhare-dotnet</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>developer;utilities;token-counter;llm;text-analysis;slug;readability;tools</PackageTags>
+    <PackageTags>developer utilities token-estimation text-analysis readability slugify</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <Copyright>Copyright (c) 2026 Mohit Khare</Copyright>
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />

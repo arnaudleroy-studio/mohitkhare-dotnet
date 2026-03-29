@@ -1,6 +1,6 @@
 # MohitKhare .NET Utilities
 
-Developer utilities for .NET projects: token counting, text analysis, slug generation, and common string helpers. Built by [Mohit Khare](https://mohitkhare.me).
+Developer utilities for token estimation, text analysis, and slug generation. Built for .NET 8+ with idiomatic C# patterns including records, pattern matching, and LINQ.
 
 ## Installation
 
@@ -8,117 +8,78 @@ Developer utilities for .NET projects: token counting, text analysis, slug gener
 dotnet add package MohitKhare
 ```
 
-Or via the NuGet Package Manager:
+## Token Estimation
 
-```
-Install-Package MohitKhare
-```
-
-## Quick Start
+Estimate token counts and API costs before sending text to LLM APIs. The estimator uses a word-boundary heuristic calibrated against BPE tokenizers (GPT, Claude):
 
 ```csharp
 using MohitKhare;
 
-// Estimate LLM token count
-var tokens = TokenCounter.Estimate("Hello, how are you doing today?");
-Console.WriteLine($"Estimated tokens: {tokens}"); // 8
+var article = File.ReadAllText("article.md");
+var estimate = TokenEstimator.Estimate(article);
 
-// Generate URL-safe slugs
-var slug = SlugGenerator.Slugify("My Blog Post Title!");
-Console.WriteLine(slug); // "my-blog-post-title"
+Console.WriteLine($"Tokens: ~{estimate.Tokens}");
+Console.WriteLine($"Words: {estimate.Words}");
+Console.WriteLine($"Estimated cost: ${estimate.EstimateCost(3.00m):F4}");
+// Tokens: ~1729
+// Words: 1300
+// Estimated cost: $0.0052
 ```
 
-## Features
+## Text Analysis
 
-### Token Counter
-
-Estimate token counts for LLM API calls. Uses the standard ~4 characters per token heuristic, suitable for planning API budgets:
+Analyze text for word count, reading time, sentence structure, and readability. Readability uses the Flesch Reading Ease formula:
 
 ```csharp
-using MohitKhare;
+var analysis = TextAnalyzer.Analyze(article);
 
-var text = "The quick brown fox jumps over the lazy dog.";
-
-// Estimate tokens
-int tokens = TokenCounter.Estimate(text);
-Console.WriteLine($"Tokens: {tokens}"); // 12
-
-// Estimate cost at a given rate
-decimal cost = TokenCounter.EstimateCost(text, pricePerMillionTokens: 3.0m);
-Console.WriteLine($"Cost: ${cost}"); // $0.000036
-
-// Check if text fits within a context window
-bool fits = TokenCounter.FitsInBudget(text, maxTokens: 4096);
-Console.WriteLine($"Fits in 4K context: {fits}"); // true
+Console.WriteLine($"Words: {analysis.WordCount}");
+Console.WriteLine($"Sentences: {analysis.SentenceCount}");
+Console.WriteLine($"Reading time: {analysis.ReadingTime.Minutes}m {analysis.ReadingTime.Seconds}s");
+Console.WriteLine($"Readability: {analysis.FleschReadingEase} ({analysis.ReadingLevel})");
+// Words: 1300
+// Sentences: 68
+// Reading time: 5m 27s
+// Readability: 62.3 (Standard)
 ```
 
-### Text Analyzer
+## Slug Generation
 
-Compute readability metrics and text statistics:
+Convert arbitrary text to clean, URL-safe slugs with full Unicode support. Handles diacritics, special characters, and optional length limits:
 
 ```csharp
-using MohitKhare;
-
-var article = "Artificial intelligence is transforming software development. " +
-              "New tools help developers write better code faster. " +
-              "The industry is evolving rapidly.";
-
-Console.WriteLine($"Words: {TextAnalyzer.WordCount(article)}");           // 18
-Console.WriteLine($"Sentences: {TextAnalyzer.SentenceCount(article)}");   // 3
-Console.WriteLine($"Reading time: {TextAnalyzer.ReadingTimeMinutes(article)} min"); // 0.1
-Console.WriteLine($"Flesch score: {TextAnalyzer.FleschReadingEase(article)}");      // ~60-70
+Slugify.ToSlug("C# Best Practices 2025");    // "c-best-practices-2025"
+Slugify.ToSlug("Resume: A Developer's Path"); // "resume-a-developers-path"
+Slugify.ToSlug("Long Title Here", maxLength: 10); // "long-title"
 ```
 
-### Slug Generator
+## Reading Levels
 
-Generate URL-safe slugs with multiple format options:
+The Flesch Reading Ease score maps to human-readable levels:
 
-```csharp
-using MohitKhare;
+| Score | Level | Typical Audience |
+|-------|-------|-----------------|
+| 90-100 | Very Easy | 5th grader |
+| 80-89 | Easy | 6th grader |
+| 70-79 | Fairly Easy | 7th grader |
+| 60-69 | Standard | 8th-9th grader |
+| 50-59 | Fairly Difficult | High school |
+| 30-49 | Difficult | College |
+| 0-29 | Very Difficult | Graduate |
 
-// URL slug
-SlugGenerator.Slugify("Hello World! 2024");    // "hello-world-2024"
+## API Surface
 
-// File-safe name
-SlugGenerator.ToFileName("My Report.pdf");      // "my_reportpdf"
-
-// camelCase
-SlugGenerator.ToCamelCase("user profile page"); // "userProfilePage"
-```
-
-### String Extensions
-
-Convenient extension methods for everyday string manipulation:
-
-```csharp
-using MohitKhare;
-
-// Truncate with ellipsis
-"A very long sentence that needs truncation".Truncate(20);
-// "A very long sente..."
-
-// Strip HTML tags
-"<p>Hello <strong>world</strong></p>".StripHtml();
-// "Hello world"
-
-// Extract first N sentences
-var text = "First sentence. Second sentence. Third sentence.";
-text.FirstSentences(2);
-// "First sentence. Second sentence."
-```
-
-## Use Cases
-
-- **LLM cost estimation** -- Budget API calls before sending requests to OpenAI, Anthropic, or other providers.
-- **Content analysis** -- Compute readability scores for blog posts and documentation.
-- **SEO tools** -- Generate consistent URL slugs for web applications.
-- **Text processing** -- Strip HTML, truncate strings, and extract summaries in content pipelines.
+| Type | Description |
+|------|-------------|
+| `TokenEstimator` | BPE-calibrated token count and cost estimation |
+| `TextAnalyzer` | Word count, reading time, Flesch readability |
+| `Slugify` | Unicode-aware slug generation with optional length limit |
 
 ## Links
 
-- [Mohit Khare Homepage](https://mohitkhare.me)
+- [MohitKhare](https://mohitkhare.me)
 - [Source Code](https://github.com/arnaudleroy-studio/mohitkhare-dotnet)
-- [Report Issues](https://github.com/arnaudleroy-studio/mohitkhare-dotnet/issues)
+- [NuGet Package](https://www.nuget.org/packages/MohitKhare)
 
 ## License
 
